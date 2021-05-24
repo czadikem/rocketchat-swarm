@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+
+  rocketchat:
+    image: rocketchat/rocket.chat:latest
+    hostname: rocketchat
+    networks:
+      - backend
+      - traefik-public
+    volumes:
+      - ./uploads:/app/uploads
+#     logging:
+#       driver: none
+    deploy:
+      mode: replicated
+      replicas: 3
+      restart_policy:
+        condition: any
+      update_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        # Access Router
+        - "traefik.http.routers.rocketchat.rule=Host(`${ROCKETCHAT_HOSTNAME}`)"
+        - "traefik.http.routers.rocketchat.tls.certresolver=letsencrypt"
+        - "traefik.http.routers.rocketchat.entrypoints=websecure"
+        - "traefik.http.routers.rocketchat.service=rocketchat-service"
+
+        # Service
+        - "traefik.http.services.rocketchat-service.loadbalancer.server.port=3000"
+        - "traefik.http.services.rocketchat-service.loadbalancer.sticky.cookie=true"
+        - "traefik.http.services.rocketchat-service.loadbalancer.sticky.cookie.secure=true"
+    command: >
+      bash -c
+        "for i in `seq 1 30`; do
+          node main.js &&
+          s=$$? && break || s=$$?;
+          echo \"Tried $$i times. Waiting 5 secs...\";
+          sleep 5;
+        done; (exit $$s)"
+    environment:
+      - PORT=3000
+      - ROOT_URL=http://rocketchat.autiboystech.com
+      - MONGO_URL=mongodb://mongo:27017/rocketchat
+      - MONGO_OPLOG_URL=mongodb://mongo:27017/local
+      - MAIL_URL=smtp://smtp.email
+#       - HTTP_PROXY=http://proxy.domain.com
+#       - HTTPS_PROXY=http://proxy.domain.com
+
+  mongo:
+    image: mongo:4.0
+    networks:
+      - backend
+    volumes:
+     - ./data/db:/data/db
+     #- ./data/dump:/dump
+    deploy:
+#      placement:
+#        constraints:
+#          - node.labels.database-server == true
+      replicas: 1
+      restart_policy:
+        condition: any
+      update_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+#     labels:
+#       - "traefik.enable=false"
+    command: mongod --smallfiles --oplogSize 128 --replSet rs0 --storageEngine=mmapv1
+
+
+#  this container's job is just run the command to initialize the replica set.
+#  it will run the command and remove himself (it will not stay running)
+  mongo-init-replica:
+    image: mongo:4.0
+    networks:
+      - backend
+    deploy:
+#      placement:
+#        constraints:
+#          - node.labels.database-server == true
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+    command: >
+      bash -c
+        "for i in `seq 1 30`; do
+          mongo mongo/rocketchat --eval \"
+            rs.initiate({
+              _id: 'rs0',
+              members: [ { _id: 0, host: 'localhost:27017' } ]})\" &&
+          s=$$? && break || s=$$?;
+          echo \"Tried $$i times. Waiting 5 secs...\";
+          sleep 5;
+        done; (exit $$s)"
+
+#  hubot, the popular chatbot (add the bot user first and change the password before starting this image)
+  hubot:
+    image: rocketchat/hubot-rocketchat:latest
+    networks:
+      - backend
+    ports:  #  this is used to expose the hubot port for notifications on the host on port 3001, e.g. for hubot-jenkins-notifier
+      - 3001:8080
+    volumes:
+      - ./scripts:/home/hubot/scripts
+
+    deploy:
+#      placement:
+#        constraints:
+#          - node.labels.database-server == true
+      replicas: 1
+      restart_policy:
+        condition: any
+      update_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+      rollback_config:
+        parallelism: 2
+        delay: 10s
+        order: stop-first
+        monitor: 10s
+    environment:
+      - ROCKETCHAT_URL=rocketchat:3000
+      - ROCKETCHAT_ROOM=GENERAL
+      - ROCKETCHAT_USER=bot
+      - ROCKETCHAT_PASSWORD=botpassword
+      - BOT_NAME=bot
+      - EXTERNAL_SCRIPTS=hubot-help,hubot-seen,hubot-links,hubot-diagnostics    #  you can add more scripts as you'd like here, they need to be installable by npm
+#     labels:
+#       - "traefik.enable=false"
+
+networks:
+  traefik-public:
+    external: true
+  backend:
+    driver: overlay
