@@ -50,7 +50,7 @@ services:
         done; (exit $$s)"
     environment:
       - PORT=3000
-      - ROOT_URL=http://rocketchat.autiboystech.com
+      - ROOT_URL=https://${ROCKETCHAT_HOSTNAME}
       - MONGO_URL=mongodb://mongo:27017/rocketchat
       - MONGO_OPLOG_URL=mongodb://mongo:27017/local
       - MAIL_URL=smtp://smtp.email
