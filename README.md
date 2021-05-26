@@ -14,4 +14,12 @@ Make sure you have this setup and installed **https://github.com/czadikem/core**
 5.  ```cp .env.template .env```
 6.  ```nano .env```  Put your hostname for rocketchat in this file along with your mail_url if you have one otherwise leave it as the default.  Also "You can get three free hostnames from noip"
 
-https://github.com/RocketChat/Rocket.Chat/blob/develop/docker-compose.yml
+# rocketchat-swarm Deployment
+1.  ```docker stack deploy -c <(docker-compose config) rocketchat``` **You must be in the rocketchat-swarm folder for this to work**
+
+# rocketchat-swarm Stop
+1.  ```docker stack down rocketchat```
+
+# Acknowledgments
+Thanks to the wonderful people that made and maintain Rocketchat https://github.com/RocketChat/Rocket.Chat/ along with there docker-compose.yml https://github.com/RocketChat/Rocket.Chat/blob/develop/docker-compose.yml and thanks too Oscar at https://silkky.cloud/ for helping me learn, setup and understand docker swarm
+
